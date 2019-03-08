@@ -50,7 +50,7 @@ func TestControllerFlashes(t *testing.T) {
 		t.Fatalf("error creating request: %+v", err)
 	}
 
-	flash := controllers.Flash{"key": "value"}
+	flash := seatbelt.Flash{"key": "value"}
 	c.Flash(w, r, flash)
 
 	for _, cookie := range w.Result().Cookies() {
