@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -52,7 +53,12 @@ func (s *server) initialize() {
 
 func (s *server) registerRoutes(r *chi.Mux) {
 	publicFilepath := filepath.Join(config.RootPath, "public")
+
+	// Serve assets from the /public directory.
 	fileserver(r, "/public", http.Dir(publicFilepath))
+
+	// Serve static HTML files within the views folder.
+	r.NotFound(templateResolver)
 
 	s.srv.Handler = r
 }
@@ -64,7 +70,7 @@ func (s *server) listenForShutdown() {
 	<-s.quit
 	logrus.Infoln("Server is shutting down.")
 
-	if s.cmd != nil {
+	if s.cmd.Cmd != nil {
 		s.cmd.stop()
 	}
 
@@ -120,4 +126,46 @@ func fileserver(r chi.Router, path string, root http.FileSystem) {
 	r.Get(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fs.ServeHTTP(w, r)
 	}))
+}
+
+// templateResolver renders the template matching the current path, if it
+// exists. If not, it returns 404 Not Found.
+func templateResolver(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimPrefix(r.URL.Path, "/")
+
+	switch name {
+	case "":
+		// Render any "index.html" template that is present.
+		f, err := os.Open(filepath.Join(config.RootPath, "views", "index.html"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		defer f.Close()
+
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		if _, err := io.Copy(w, f); err != nil {
+			logrus.Errorf("Error writing index.html file: %+v", err)
+		}
+
+	case "layout", "layout.html":
+		http.Error(w, "The name layout is reserved", http.StatusBadRequest)
+		return
+
+	default:
+		// Try to render a template matching the path.
+		f, err := os.Open(filepath.Join(config.RootPath, "views", filepath.Clean(name)+".html"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		defer f.Close()
+
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		if _, err := io.Copy(w, f); err != nil {
+			logrus.Errorf("Error writing %s file: %+v", name, err)
+		}
+	}
 }

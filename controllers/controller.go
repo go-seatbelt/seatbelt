@@ -6,13 +6,12 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-seatbelt/seatbelt"
+	"github.com/go-seatbelt/seatbelt/internal/config"
 	"github.com/go-seatbelt/seatbelt/internal/trace"
 	"github.com/sirupsen/logrus"
 )
@@ -21,14 +20,9 @@ import (
 var DefaultController *Controller
 
 func init() {
-	basepath, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-
 	controller := &Controller{
 		Render: &Render{
-			Basepath: filepath.Clean(basepath),
+			Basepath: config.RootPath,
 		},
 	}
 

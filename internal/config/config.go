@@ -72,11 +72,11 @@ func init() {
 
 	// Assume the user's root path is the directory that the execuatble is
 	// running in.
-	bin, err := os.Executable()
+	dir, err := os.Getwd()
 	if err != nil {
 		panic(err)
 	}
-	RootPath = filepath.Dir(bin)
+	RootPath = dir
 	logrus.Infoln("Root path is", RootPath)
 
 	cfg := readConfig()
