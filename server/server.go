@@ -16,7 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var isDevelopment = os.Getenv("SEATBELT_ENV") == "development"
+var isDevelopment = os.Getenv("SEATBELT_ENV") != "production"
 
 type server struct {
 	srv  *http.Server
