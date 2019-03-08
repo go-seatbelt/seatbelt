@@ -60,7 +60,9 @@ func (s *server) registerRoutes(r *chi.Mux) {
 	// Serve static HTML files within the views folder.
 	r.NotFound(templateResolver)
 
-	s.srv.Handler = r
+	// Register the handler with our server, wrapping it with the Turbolinks
+	// wrapper before doing so.
+	s.srv.Handler = Turbolinks(r)
 }
 
 func (s *server) listenForShutdown() {
