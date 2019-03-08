@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,8 @@ var DefaultController *Controller
 func init() {
 	controller := &Controller{
 		Render: &Render{
-			Basepath: config.RootPath,
+			Basepath:      config.RootPath,
+			IsDevelopment: os.Getenv("SEATBELT_ENV") != "production",
 		},
 	}
 
