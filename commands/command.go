@@ -23,6 +23,11 @@ func New(args []string) *cli.CLI {
 				ui: ui,
 			}, nil
 		},
+		"extract": func() (cli.Command, error) {
+			return &ExtractCommand{
+				ui: ui,
+			}, nil
+		},
 	}
 
 	c := cli.NewCLI("seatbelt", "0.0.1")
