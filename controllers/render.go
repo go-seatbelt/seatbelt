@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/go-seatbelt/seatbelt"
+	"github.com/go-seatbelt/seatbelt/i18n"
 	"github.com/sirupsen/logrus"
 )
 
@@ -56,6 +57,15 @@ func (render *Render) HTML(w http.ResponseWriter, r *http.Request, view string, 
 
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
+
+	// Register the i18n func in the template's funcmap.
+	if tpl := render.templates.Lookup(view); tpl != nil {
+		tpl.Funcs(template.FuncMap{
+			"t": func(name string, args ...interface{}) string {
+				return i18n.T(r, name, args)
+			},
+		})
+	}
 
 	if err := render.templates.ExecuteTemplate(w, view, data); err != nil {
 		logrus.Errorf("Error rendering template: %+v", err)
@@ -141,6 +151,9 @@ var helperFuncs = template.FuncMap{
 	"yield": func() (string, error) {
 		return "", fmt.Errorf("yield called with no layout defined")
 	},
+	"t": func(name string, args ...interface{}) string {
+		return "t called with no translations defined"
+	},
 }
 
 // addLayoutFuncs adds all library-defined layout funcs, overwriting the
@@ -152,6 +165,9 @@ func (render *Render) addLayoutFuncs(view string, binding interface{}) {
 			err := render.templates.ExecuteTemplate(buf, view, binding)
 			// Return safe HTML here since we are rendering our own template.
 			return template.HTML(buf.String()), err
+		},
+		"t": func(name string, args ...interface{}) string {
+			return "t called with no translations defined"
 		},
 	}
 
