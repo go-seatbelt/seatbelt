@@ -30,7 +30,7 @@ func init() {
 
 	localePath := filepath.Join(config.RootPath, "config", "locales")
 	if err := filepath.Walk(localePath, func(path string, info os.FileInfo, _ error) error {
-		if info.IsDir() {
+		if info == nil || info.IsDir() {
 			return nil
 		}
 		_, err := bundle.LoadMessageFile(path)

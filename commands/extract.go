@@ -8,6 +8,8 @@ import (
 
 	"github.com/mitchellh/cli"
 	"golang.org/x/net/html"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message/pipeline"
 	"gopkg.in/yaml.v2"
 )
 
@@ -37,6 +39,37 @@ func (c *ExtractCommand) Run(args []string) int {
 	if err != nil {
 		c.ui.Error("Failed to get working directory: " + err.Error())
 		return 1
+	}
+
+	// Attempt to extract stuff.
+	if len(args) > 1 {
+		state, err := pipeline.Extract(&pipeline.Config{
+			SourceLanguage:      language.English,
+			Supported:           []language.Tag{language.French},
+			TranslationsPattern: `messages\.(.*)\.json`,
+			Dir:                 filepath.Join(wd, "config", "locales"),
+		})
+		if err != nil {
+			c.ui.Error("Error extracting translations from Go source files: " + err.Error())
+			return 1
+		}
+
+		if err := state.Import(); err != nil {
+			c.ui.Error("Error importing translations from Go source files: " + err.Error())
+			return 1
+		}
+
+		if err := state.Merge(); err != nil {
+			c.ui.Error("Error merging translations from Go source files: " + err.Error())
+			return 1
+		}
+		if err := state.Export(); err != nil {
+			c.ui.Error("Error exporting translations from Go source files: " + err.Error())
+			return 1
+		}
+
+		c.ui.Info("cmd/gotext based extraction successful!")
+		return 0
 	}
 
 	// Parse the config file, if it exists.
