@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-seatbelt/seatbelt/internal/trace"
+	"github.com/go-seatbelt/seatbelt/x/trace"
 )
 
 func TestTrace(t *testing.T) {

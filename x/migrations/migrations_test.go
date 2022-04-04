@@ -3,7 +3,7 @@ package migrations_test
 import (
 	"testing"
 
-	"github.com/go-seatbelt/seatbelt/migrations"
+	"github.com/go-seatbelt/seatbelt/x/migrations"
 )
 
 func TestMigrations(t *testing.T) {

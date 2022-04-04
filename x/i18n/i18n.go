@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/go-seatbelt/seatbelt"
-	"github.com/go-seatbelt/seatbelt/internal/config"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/text/language"
@@ -25,10 +24,10 @@ const (
 )
 
 func init() {
-	bundle = &i18n.Bundle{DefaultLanguage: language.English}
+	bundle = i18n.NewBundle(language.English)
 	bundle.RegisterUnmarshalFunc("yml", yaml.Unmarshal)
 
-	localePath := filepath.Join(config.RootPath, "config", "locales")
+	localePath := filepath.Join(".", "config", "locales")
 	if err := filepath.Walk(localePath, func(path string, info os.FileInfo, _ error) error {
 		if info == nil || info.IsDir() {
 			return nil
@@ -56,7 +55,7 @@ func T(r *http.Request, name string, args ...interface{}) string {
 	if len(args) > 1 {
 		localizerConfig.PluralCount = args[0]
 
-		data := make(seatbelt.Data)
+		data := make(seatbelt.KV)
 		data["PluralCount"] = localizerConfig.PluralCount
 
 		for i := 1; i < len(args); i++ {
