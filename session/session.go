@@ -12,7 +12,9 @@ type sessionCtxKeyType struct{}
 
 const defaultSessionName = "_session"
 
-var sessionCtxKey = sessionCtxKeyType{}
+var (
+	sessionCtxKey = sessionCtxKeyType{}
+)
 
 // A Session manages setting and getting data from the cookie that stores the
 // session data.
