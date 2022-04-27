@@ -2,8 +2,6 @@
 
 An MVC web framework for Go that balances upfront productivity with long term maintability.
 
-Developed while building Mart.ai.
-
 Inspired by Ruby on Rails.
 
 ### Usage

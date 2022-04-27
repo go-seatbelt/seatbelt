@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/go-seatbelt/seatbelt/commands"
+	"github.com/go-seatbelt/seatbelt/x/commands"
 )
 
 func main() {
