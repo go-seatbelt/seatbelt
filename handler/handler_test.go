@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/go-seatbelt/seatbelt/handler"
 )
 
 // expectEqual checks if the results are equal, and calls t.Fatal if not.
-func expectEqual[T comparable](t *testing.T, expected, actual T) {
-	if expected != actual {
+func expectEqual(t *testing.T, expected, actual interface{}) {
+	if !reflect.DeepEqual(expected, actual) {
 		t.Fatalf("expected %v but got %v", expected, actual)
 	}
 }
