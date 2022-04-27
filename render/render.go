@@ -17,19 +17,25 @@ import (
 	"sync"
 )
 
+// A ContextualFuncMap is a function that returns an HTML template.FuncMap.
+//
+// It is used to provide a renderer with template function that have
+// request-scoped data.
+type ContextualFuncMap func(w http.ResponseWriter, r *http.Request) template.FuncMap
+
 type Render struct {
 	dir    string
 	mu     sync.Mutex
-	tpls   map[string]*template.Template
 	pool   sync.Pool
+	tpls   map[string]*template.Template
+	funcs  []ContextualFuncMap
 	reload bool
-	funcs  func(r *http.Request) template.FuncMap
 }
 
 type Options struct {
 	Dir    string
+	Funcs  []ContextualFuncMap
 	Reload bool
-	Funcs  func(r *http.Request) template.FuncMap
 }
 
 func New(o Options) *Render {
@@ -40,8 +46,8 @@ func New(o Options) *Render {
 				return &bytes.Buffer{}
 			},
 		},
-		reload: o.Reload,
 		funcs:  o.Funcs,
+		reload: o.Reload,
 	}
 
 	r.mu.Lock()
@@ -73,8 +79,12 @@ func (r *Render) parseTemplates() error {
 	// and is provided with request-specific information.
 	if r.funcs != nil {
 		noopFuncMap := make(map[string]interface{})
-		for name := range r.funcs(nil) {
-			noopFuncMap[name] = func() struct{} { return struct{}{} }
+		for _, fn := range r.funcs {
+			if fn != nil {
+				for name := range fn(nil, nil) {
+					noopFuncMap[name] = func() struct{} { return struct{}{} }
+				}
+			}
 		}
 		ltpl.Funcs(noopFuncMap)
 	}
@@ -201,9 +211,16 @@ func (r *Render) HTML(w io.Writer, req *http.Request, name string, data map[stri
 
 	// Add the template funcs, providing the context of the current request,
 	// if one is provided.
-	if req != nil {
-		if r.funcs != nil {
-			tpl.Funcs(r.funcs(req))
+	rw, ok := w.(http.ResponseWriter)
+	if ok {
+		if req != nil {
+			if r.funcs != nil {
+				for _, fn := range r.funcs {
+					if fn != nil {
+						tpl.Funcs(fn(rw, req))
+					}
+				}
+			}
 		}
 	}
 
@@ -213,7 +230,7 @@ func (r *Render) HTML(w io.Writer, req *http.Request, name string, data map[stri
 		return
 	}
 
-	if rw, ok := w.(http.ResponseWriter); ok {
+	if ok {
 		rw.Header().Set("Content-Type", "text/html")
 		rw.WriteHeader(o.StatusCode)
 	}

@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-seatbelt/seatbelt"
 	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/text/language"
@@ -55,7 +54,7 @@ func T(r *http.Request, name string, args ...interface{}) string {
 	if len(args) > 1 {
 		localizerConfig.PluralCount = args[0]
 
-		data := make(seatbelt.KV)
+		data := make(map[string]interface{})
 		data["PluralCount"] = localizerConfig.PluralCount
 
 		for i := 1; i < len(args); i++ {

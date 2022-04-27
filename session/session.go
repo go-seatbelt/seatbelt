@@ -2,19 +2,31 @@ package session
 
 import (
 	"context"
+	"encoding/gob"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/securecookie"
 )
 
 type sessionCtxKeyType struct{}
 
-const defaultSessionName = "_session"
+const (
+	defaultSessionName = "_session"
+	defaultMaxAge      = 86400 * 365
+)
 
 var (
 	sessionCtxKey = sessionCtxKeyType{}
 )
+
+func init() {
+	// Register the encodings used in this package with gob such that we can
+	// successfully save session data in the session.
+	gob.Register(map[string]interface{}{})
+	gob.Register(&session{})
+}
 
 // A Session manages setting and getting data from the cookie that stores the
 // session data.
@@ -24,8 +36,12 @@ type Session struct {
 
 // New creates a new session with the given key.
 func New(secret []byte) *Session {
+	sc := securecookie.New(secret, nil)
+	// Default to one year for new cookies, since some browsers don't set
+	// their cookies with the same defaults.
+	sc.MaxAge(defaultMaxAge)
 	return &Session{
-		sc: securecookie.New(secret, nil),
+		sc: sc,
 	}
 }
 
@@ -75,7 +91,7 @@ func (s *Session) fromReq(r *http.Request) *session {
 	}
 
 	ss := &session{}
-	if err := s.sc.Decode(defaultSessionName, cookie.Value, s); err != nil {
+	if err := s.sc.Decode(defaultSessionName, cookie.Value, ss); err != nil {
 		log.Println("[error] failed to decode session from cookie:", err)
 		ss.init()
 		return ss
@@ -98,6 +114,8 @@ func (s *Session) saveCtx(w http.ResponseWriter, r *http.Request, session *sessi
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     defaultSessionName,
+		MaxAge:   defaultMaxAge,
+		Expires:  time.Now().UTC().Add(time.Duration(defaultMaxAge * time.Second)),
 		Value:    encoded,
 		Path:     "/",
 		HttpOnly: true,
@@ -132,6 +150,14 @@ func (s *Session) Delete(w http.ResponseWriter, r *http.Request, key string) int
 	delete(data.Data, key)
 	s.saveCtx(w, r, data)
 	return value
+}
+
+// Reset resets the session, deleting all values.
+func (s *Session) Reset(w http.ResponseWriter, r *http.Request) {
+	s.saveCtx(w, r, &session{
+		Data:    make(map[string]interface{}),
+		Flashes: make(map[string]interface{}),
+	})
 }
 
 // Flash sets a flash message on a request.
