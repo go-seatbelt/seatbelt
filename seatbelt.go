@@ -14,7 +14,6 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/gorilla/csrf"
-	_ "golang.org/x/text/message" // Required for commands to work.
 )
 
 // ChiPathParamFunc extracts path parameters from the given HTTP request using
