@@ -1,11 +1,13 @@
 package seatbelt
 
 import (
+	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/go-seatbelt/seatbelt/handler"
@@ -192,8 +194,40 @@ func (o *Option) setDefaults() {
 		o.TemplateDir = "templates"
 	}
 	if o.SigningKey == "" {
-		o.SigningKey = "0000000000000000000000000000000000000000000000000000000000000000"
+		o.setMasterKey()
 	}
+}
+
+// setMasterKey makes sure that a master key is set. If the "SECRET"
+// environment variable is set, that value is used. If not, we check the
+// "master.key" file to see if it exists. If it is, its value is used, and if
+// not, a random 64 character hex encoded string is generated and written to
+// a new "master.key" file.
+//
+// The "master.key" file is a secret and should be treated as such. It should
+// not be checked into your source code, and in production, the "SECRET"
+// environment variable should instead be used.
+func (o *Option) setMasterKey() {
+	if key := os.Getenv("SECRET"); key != "" {
+		o.SigningKey = key
+	}
+
+	if key, err := os.ReadFile("master.key"); err == nil {
+		o.SigningKey = string(key)
+		return
+	}
+
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("seatbelt: failed to read from source of randomness while generating master.key: %v", err))
+	}
+	key := make([]byte, hex.EncodedLen(len(b)))
+	hex.Encode(key, b)
+
+	if err := os.WriteFile("master.key", key, 0600); err != nil {
+		log.Fatalln("seatbelt: failed to write newly generated master.key:", err)
+	}
+	o.SigningKey = string(key)
 }
 
 // defaultTemplateFuncs sets default HTML template functions on each request
