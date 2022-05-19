@@ -264,7 +264,7 @@ func defaultTemplateFuncs(session *session.Session) func(w http.ResponseWriter, 
 				if err == nil {
 					path = path + "?" + strconv.Itoa(int(fi.ModTime().Unix()))
 				} else {
-					fmt.Printf("seatbelt: error getting css file info at path %s: %v\n", path, err)
+					fmt.Printf("seatbelt: error getting file info at path %s: %v\n", path, err)
 				}
 
 				return path
