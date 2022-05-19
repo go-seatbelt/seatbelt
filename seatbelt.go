@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/go-seatbelt/seatbelt/handler"
@@ -174,8 +176,15 @@ type Option struct {
 	// The directory containing your HTML templates.
 	TemplateDir string
 
-	// The signing key for the cookie session store.
+	// The signing key for the session cookie store.
 	SigningKey string
+
+	// The session name for the session cookie. Default is "_session".
+	SessionName string
+
+	// The MaxAge for the session cookie. Default is 365 days. Pass -1 for no
+	// max age.
+	SessionMaxAge int
 
 	// Request-contextual HTML functions.
 	Funcs func(w http.ResponseWriter, r *http.Request) template.FuncMap
@@ -241,6 +250,28 @@ func defaultTemplateFuncs(session *session.Session) func(w http.ResponseWriter, 
 			"flashes": func() map[string]interface{} {
 				return session.Flashes(w, r)
 			},
+			// versionpath takes a filepath and returns the same filepath with
+			// a query parameter appended that contains the unix timestamp of
+			// that file's last modified time. This should be used for files
+			// that might change between page loads (JavaScript and CSS files,
+			// images, etc).
+			"versionpath": func(path string) string {
+				path = filepath.Clean(path)
+
+				// Leading `/` characters will just break local filepath
+				// resolution, so we remove it if it exists.
+				fi, err := os.Stat(strings.TrimPrefix(path, "/"))
+				if err == nil {
+					path = path + "?" + strconv.Itoa(int(fi.ModTime().Unix()))
+				} else {
+					fmt.Printf("seatbelt: error getting file info at path %s: %v\n", path, err)
+				}
+
+				return path
+			},
+			"csrfMetaTags": func() template.HTML {
+				return template.HTML(`<meta name="csrf-token" content="` + csrf.Token(r) + `">`)
+			},
 		}
 	}
 }
@@ -263,7 +294,10 @@ func New(opts ...Option) *App {
 	mux := chi.NewRouter()
 	mux.Use(csrf.Protect(signingKey))
 
-	sess := session.New(signingKey)
+	sess := session.New(signingKey, session.Options{
+		Name:   opt.SessionName,
+		MaxAge: opt.SessionMaxAge,
+	})
 
 	app := &App{
 		mux:        mux,
