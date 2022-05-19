@@ -67,11 +67,9 @@ func (r *Render) parseTemplates() error {
 	dirfs := os.DirFS(r.dir)
 
 	// Parse the layout template in order to clone it for each template later.
-	ltpl, err := template.New("layout").ParseFS(dirfs, "layout.html")
-	if err != nil {
-		log.Fatalln("[error] parsing layout template", err)
-		return err
-	}
+	// Because template functions may be defined in the layout, we also need
+	// to add them prior to actually doing any parsing.
+	basetpl := template.New("layout")
 
 	// Define an initial map of template funcs as no-ops. This will be passed
 	// to templates **before** parsing in order to prevent a "function not
@@ -86,7 +84,13 @@ func (r *Render) parseTemplates() error {
 				}
 			}
 		}
-		ltpl.Funcs(noopFuncMap)
+		basetpl.Funcs(noopFuncMap)
+	}
+
+	ltpl, err := basetpl.ParseFS(dirfs, "layout.html")
+	if err != nil {
+		log.Fatalln("[error] parsing layout template", err)
+		return err
 	}
 
 	rootDir := "."

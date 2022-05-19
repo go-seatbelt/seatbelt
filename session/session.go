@@ -31,17 +31,44 @@ func init() {
 // A Session manages setting and getting data from the cookie that stores the
 // session data.
 type Session struct {
-	sc *securecookie.SecureCookie
+	sc   *securecookie.SecureCookie
+	name string
+}
+
+// Options to customize the behaviour of the session.
+type Options struct {
+	// The name of the cookie (default is "_session").
+	Name string
+
+	// MaxAge of the cookie before expiry (default is 365 days). Set it to
+	// -1 for no expiry.
+	MaxAge int
 }
 
 // New creates a new session with the given key.
-func New(secret []byte) *Session {
+func New(secret []byte, opts ...Options) *Session {
+	var o Options
+	for _, opt := range opts {
+		o = opt
+	}
+
+	if o.Name == "" {
+		o.Name = defaultSessionName
+	}
+	switch o.MaxAge {
+	case 0:
+		// Default to one year, since some browsers don't set their cookies
+		// with the same defaults.
+		o.MaxAge = defaultMaxAge
+	case -1:
+		o.MaxAge = 0
+	}
+
 	sc := securecookie.New(secret, nil)
-	// Default to one year for new cookies, since some browsers don't set
-	// their cookies with the same defaults.
-	sc.MaxAge(defaultMaxAge)
+	sc.MaxAge(o.MaxAge)
 	return &Session{
-		sc: sc,
+		sc:   sc,
+		name: o.Name,
 	}
 }
 
@@ -79,7 +106,7 @@ func (s *Session) fromReq(r *http.Request) *session {
 		}
 	}
 
-	cookie, err := r.Cookie(defaultSessionName)
+	cookie, err := r.Cookie(s.name)
 	if err != nil {
 		// The only error that can be returned by r.Cookie() is ErrNoCookie,
 		// so if the error is not nil, that means that the cookie doesn't
@@ -91,7 +118,7 @@ func (s *Session) fromReq(r *http.Request) *session {
 	}
 
 	ss := &session{}
-	if err := s.sc.Decode(defaultSessionName, cookie.Value, ss); err != nil {
+	if err := s.sc.Decode(s.name, cookie.Value, ss); err != nil {
 		log.Println("[error] failed to decode session from cookie:", err)
 		ss.init()
 		return ss
@@ -106,14 +133,14 @@ func (s *Session) saveCtx(w http.ResponseWriter, r *http.Request, session *sessi
 	r2 := r.Clone(ctx)
 	*r = *r2
 
-	encoded, err := s.sc.Encode(defaultSessionName, session)
+	encoded, err := s.sc.Encode(s.name, session)
 	if err != nil {
 		log.Println("error encoding cookie:", err)
 		return
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     defaultSessionName,
+		Name:     s.name,
 		MaxAge:   defaultMaxAge,
 		Expires:  time.Now().UTC().Add(time.Duration(defaultMaxAge * time.Second)),
 		Value:    encoded,
