@@ -27,7 +27,7 @@ type Render struct {
 	dir    string
 	mu     sync.Mutex
 	pool   sync.Pool
-	tpls   map[string]*template.Template
+	tpls   map[string]map[string]*template.Template
 	funcs  []ContextualFuncMap
 	reload bool
 }
@@ -52,16 +52,40 @@ func New(o Options) *Render {
 
 	r.mu.Lock()
 	if err := r.parseTemplates(); err != nil {
-		log.Fatalln("[fatal] failed to parse templates:", err)
+		panic("seatbelt/render: failed to parse templates: " + err.Error())
 	}
 	r.mu.Unlock()
 
 	return r
 }
 
+// extractNameFromPath extracts a template name from a filepath relative to
+// the given root directory.
+func extractNameFromPath(rootDir, path string) string {
+	rel, err := filepath.Rel(rootDir, path)
+	if err != nil {
+		panic(fmt.Sprintf("seatbelt/render: failed to determine relative dir from %s to %s: %v",
+			rootDir, path, err))
+	}
+
+	var ext string
+	if strings.Contains(rel, ".") {
+		ext = filepath.Ext(rel)
+	}
+	if ext != ".html" {
+		panic(fmt.Sprintf("seatbelt/render: template %s must end in .html, got %s\n", path, ext))
+	}
+
+	name := rel[0 : len(rel)-len(ext)]
+
+	// On Windows, replace the OS-specific path separator "\" with the
+	// conventional Linux/Mac one.
+	return strings.Replace(name, `\`, "/", -1)
+}
+
 func (r *Render) parseTemplates() error {
 	if r.tpls == nil {
-		r.tpls = make(map[string]*template.Template)
+		r.tpls = make(map[string]map[string]*template.Template)
 	}
 
 	dirfs := os.DirFS(r.dir)
@@ -87,9 +111,45 @@ func (r *Render) parseTemplates() error {
 		basetpl.Funcs(noopFuncMap)
 	}
 
-	ltpl, err := basetpl.ParseFS(dirfs, "layout.html")
-	if err != nil {
-		log.Fatalln("[error] parsing layout template", err)
+	// Create a temporary map to associate a name with the layout templates.
+	// In order to support Go templates' `block` functionality, we'll need to
+	// create a clone of each set of actual templates for each layout template.
+	layoutTplMap := make(map[string]*template.Template)
+
+	// Parse all of the layout templates into the top-level of the template
+	// map.
+	layoutRootDir := filepath.Join(".", "layouts")
+	if err := fs.WalkDir(dirfs, layoutRootDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d == nil || d.IsDir() {
+			return nil
+		}
+
+		layoutName := extractNameFromPath(layoutRootDir, path)
+
+		layoutTemplate, err := basetpl.ParseFS(dirfs, filepath.Join("layouts", layoutName+".html"))
+		if err != nil {
+			log.Printf("[error] parsing layout template %s: %v", layoutName, err)
+			return err
+		}
+
+		clone, err := layoutTemplate.Clone()
+		if err != nil {
+			return fmt.Errorf("seatbelt/render: failed to clone layout template: %w", err)
+		}
+
+		_, err = clone.ParseFS(dirfs, path)
+		if err != nil {
+			return fmt.Errorf("seatbelt/render: failed to parse layout template %s at path %s: %w", layoutName, path, err)
+		}
+
+		layoutTplMap[layoutName] = clone
+
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -103,39 +163,31 @@ func (r *Render) parseTemplates() error {
 			return nil
 		}
 
-		rel, err := filepath.Rel(rootDir, path)
-		if err != nil {
-			return err
+		name := extractNameFromPath(rootDir, path)
+		// TODO Replace usage of `HasPrefix` because it's deprecated.
+		if filepath.HasPrefix(name, "layouts") {
+			return nil
 		}
 
-		ext := ""
-		if strings.Contains(rel, ".") {
-			ext = filepath.Ext(rel)
+		for layoutName, layoutTemplate := range layoutTplMap {
+			clone, err := layoutTemplate.Clone()
+			if err != nil {
+				return fmt.Errorf("seatbelt/render: failed to clone layout template when rendering %s: %w", name, err)
+			}
+
+			_, err = clone.ParseFS(dirfs, path)
+			if err != nil {
+				return fmt.Errorf("seatbelt/render: failed to parse template %s at path %s: %w", name, path, err)
+			}
+
+			if m, ok := r.tpls[layoutName]; ok {
+				m[name] = clone
+			} else {
+				r.tpls[layoutName] = map[string]*template.Template{
+					name: clone,
+				}
+			}
 		}
-		if ext != ".html" {
-			log.Fatalf("[error] template %s must end in .html, got %s\n", path, ext)
-			return fmt.Errorf("template %s must end in .html, got %s", path, ext)
-		}
-
-		name := rel[0 : len(rel)-len(ext)]
-
-		// On Windows, replace the OS-specific path separator "\" with the
-		// conventional Linux/Mac one.
-		name = strings.Replace(name, `\`, "/", -1)
-
-		clone, err := ltpl.Clone()
-		if err != nil {
-			log.Println("[info] failed to clone layout tempalate", err)
-			return err
-		}
-
-		_, err = clone.ParseFS(dirfs, path)
-		if err != nil {
-			log.Fatalf("[error] failed to parse template %s at path %s: %#v", name, path, err)
-			return fmt.Errorf("failed to parse template %s at path %s: %w", name, path, err)
-		}
-
-		r.tpls[name] = clone
 
 		return nil
 	})
@@ -143,11 +195,15 @@ func (r *Render) parseTemplates() error {
 
 type RenderOptions struct {
 	StatusCode int
+	Layout     string
 }
 
 func (r *RenderOptions) setDefaults() {
 	if r.StatusCode == 0 {
 		r.StatusCode = http.StatusOK
+	}
+	if r.Layout == "" {
+		r.Layout = "layout"
 	}
 }
 
@@ -166,11 +222,23 @@ func (r *Render) TextError(w io.Writer, error string, code int) {
 // all defined templates. Used to generate an error message, but can also be
 // used for debugging.
 func (r *Render) DefinedTemplates() string {
-	names := make([]string, 0, len(r.tpls))
-	for name := range r.tpls {
-		names = append(names, name)
+	layoutNames := make([]string, 0, len(r.tpls))
+	names := make([]string, 0, 8)
+
+	var hasWalkedNonLayoutTpls bool
+	for layoutName := range r.tpls {
+		layoutNames = append(layoutNames, layoutName)
+
+		if !hasWalkedNonLayoutTpls {
+			for nonLayoutName := range r.tpls[layoutName] {
+				names = append(names, nonLayoutName)
+			}
+			hasWalkedNonLayoutTpls = true
+		}
 	}
-	return strings.Join(names, ",")
+
+	return "layouts: " + strings.Join(layoutNames, ",") +
+		", templates: " + strings.Join(names, ",")
 }
 
 // HTML renders the HTML template with the given name. The HTTP request is
@@ -196,13 +264,19 @@ func (r *Render) HTML(w io.Writer, req *http.Request, name string, data map[stri
 	if r.reload {
 		r.mu.Lock()
 	}
-	tpl, ok := r.tpls[name]
+	layout, ok := r.tpls[o.Layout]
+	if !ok {
+		msg := fmt.Sprintf(`seatbelt/template: no layout named "%s", defined templates are: %s`,
+			name, r.DefinedTemplates())
+		r.TextError(w, msg, http.StatusInternalServerError)
+		return
+	}
+	tpl, ok := layout[name]
 	if r.reload {
 		r.mu.Unlock()
 	}
-
 	if !ok {
-		msg := fmt.Sprintf(`no template named "%s", defined templates are %s`,
+		msg := fmt.Sprintf(`seatbelt/render: no template named "%s", defined templates are: %s`,
 			name, r.DefinedTemplates())
 		r.TextError(w, msg, http.StatusInternalServerError)
 		return
@@ -228,8 +302,9 @@ func (r *Render) HTML(w io.Writer, req *http.Request, name string, data map[stri
 		}
 	}
 
-	if err := tpl.ExecuteTemplate(b, "layout.html", data); err != nil {
-		log.Printf("[error] failed to execute template %s: %v", name, err)
+	if err := tpl.ExecuteTemplate(b, o.Layout+".html", data); err != nil {
+		log.Printf("seatbelt/render: Failed to execute template %s with layout %s and error: %v. Defined templates are: %s",
+			name, o.Layout, err, r.DefinedTemplates())
 		r.TextError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -239,6 +314,6 @@ func (r *Render) HTML(w io.Writer, req *http.Request, name string, data map[stri
 		rw.WriteHeader(o.StatusCode)
 	}
 	if _, err := b.WriteTo(w); err != nil {
-		log.Println("[error] failed to write response:", err)
+		log.Println("seatbelt/render: failed to write response:", err)
 	}
 }

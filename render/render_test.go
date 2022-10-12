@@ -72,6 +72,33 @@ func TestRender(t *testing.T) {
 			t.Errorf("expected body %s to contain %s", s, contains)
 		}
 	})
+
+	t.Run("render a template with a differnet layout", func(t *testing.T) {
+		t.Skip()
+
+		rr := httptest.NewRecorder()
+		tr := httptest.NewRequest(http.MethodGet, "/", nil)
+
+		h := func(w http.ResponseWriter, req *http.Request) {
+			r.HTML(w, req, "index", nil, RenderOptions{
+				Layout: "alternate_layout",
+			})
+		}
+
+		h(rr, tr)
+
+		code := rr.Result().StatusCode
+		expected := http.StatusOK
+		if code != expected {
+			t.Errorf("expected status code %d but got %d", expected, code)
+		}
+
+		s := rr.Body.String()
+		contains := "Alternate Layout"
+		if !strings.Contains(s, contains) {
+			t.Errorf("expected rendered html %s to contain %s", s, contains)
+		}
+	})
 }
 
 func BenchmarkRender(b *testing.B) {
