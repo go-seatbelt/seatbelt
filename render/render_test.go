@@ -73,9 +73,7 @@ func TestRender(t *testing.T) {
 		}
 	})
 
-	t.Run("render a template with a differnet layout", func(t *testing.T) {
-		t.Skip()
-
+	t.Run("render a template with a different layout", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		tr := httptest.NewRequest(http.MethodGet, "/", nil)
 
