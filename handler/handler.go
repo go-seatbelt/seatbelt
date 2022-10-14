@@ -61,15 +61,17 @@ func JSON(w http.ResponseWriter, code int, v interface{}) error {
 // For example, if you're using the Chi router to parse the path parameters,
 // this method will look like:
 //
-// 	if rctx := chi.RouteContext(r.Context()); rctx != nil {
-// 		for i, key := range rctx.URLParams.Keys {
-// 			values[key] = rctx.URLParams.Values[i]
-// 		}
-// 	}
+//	if rctx := chi.RouteContext(r.Context()); rctx != nil {
+//		for i, key := range rctx.URLParams.Keys {
+//			values[key] = rctx.URLParams.Values[i]
+//		}
+//	}
 //
 // The top-level "seatbelt" package contains some PathParamFunc's for
 // different routers, i.e., users of github.com/go-chi/chi can use
+//
 //	seatbelt.ChiPathParamFunc
+//
 // as an argument in the Params function.
 type PathParamFunc func(r *http.Request, v map[string]interface{})
 
