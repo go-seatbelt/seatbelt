@@ -61,7 +61,7 @@ func New(o Options) *Render {
 
 // extractNameFromPath extracts a template name from a filepath relative to
 // the given root directory.
-func extractNameFromPath(rootDir, path string) string {
+func extractNameFromPath(rootDir, path string, replaceSlash bool) string {
 	rel, err := filepath.Rel(rootDir, path)
 	if err != nil {
 		panic(fmt.Sprintf("seatbelt/render: failed to determine relative dir from %s to %s: %v",
@@ -80,7 +80,10 @@ func extractNameFromPath(rootDir, path string) string {
 
 	// On Windows, replace the OS-specific path separator "\" with the
 	// conventional Linux/Mac one.
-	return strings.Replace(name, `\`, "/", -1)
+	if replaceSlash {
+		name = strings.Replace(name, `\`, "/", -1)
+	}
+	return name
 }
 
 func (r *Render) parseTemplates() error {
@@ -128,7 +131,7 @@ func (r *Render) parseTemplates() error {
 			return nil
 		}
 
-		layoutName := extractNameFromPath(layoutRootDir, path)
+		layoutName := extractNameFromPath(layoutRootDir, path, false)
 
 		layoutTemplate, err := basetpl.ParseFS(dirfs, filepath.Join("layouts", layoutName+".html"))
 		if err != nil {
@@ -163,7 +166,7 @@ func (r *Render) parseTemplates() error {
 			return nil
 		}
 
-		name := extractNameFromPath(rootDir, path)
+		name := extractNameFromPath(rootDir, path, true)
 		// TODO Replace usage of `HasPrefix` because it's deprecated.
 		if filepath.HasPrefix(name, "layouts") {
 			return nil
