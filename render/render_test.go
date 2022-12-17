@@ -61,7 +61,7 @@ func TestRender(t *testing.T) {
 		}
 	})
 
-	t.Run("render a non-existent template should 200 with an error message", func(t *testing.T) {
+	t.Run("render a non-existent template should 500 with an error message", func(t *testing.T) {
 		rr := httptest.NewRecorder()
 		tr := httptest.NewRequest(http.MethodGet, "/", nil)
 
@@ -72,7 +72,7 @@ func TestRender(t *testing.T) {
 		h(rr, tr)
 
 		code := rr.Result().StatusCode
-		expected := 200
+		expected := 500
 		if code != expected {
 			t.Errorf("expected status code %d but got %d", expected, code)
 		}
