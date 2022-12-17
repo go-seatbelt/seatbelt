@@ -299,6 +299,11 @@ func New(opts ...Option) *App {
 		MaxAge: opt.SessionMaxAge,
 	})
 
+	funcMaps := []render.ContextualFuncMap{defaultTemplateFuncs(sess)}
+	if opt.Funcs != nil {
+		funcMaps = append(funcMaps, opt.Funcs)
+	}
+
 	app := &App{
 		mux:        mux,
 		signingKey: signingKey,
@@ -307,10 +312,7 @@ func New(opts ...Option) *App {
 			Dir:    opt.TemplateDir,
 			Layout: "layout",
 			Reload: opt.Reload,
-			Funcs: []render.ContextualFuncMap{
-				defaultTemplateFuncs(sess),
-				opt.Funcs,
-			},
+			Funcs:  funcMaps,
 		}),
 	}
 

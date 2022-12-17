@@ -1,36 +1,32 @@
-{{ define "title" }}Session{{ end }}
+{{ define "title-session" }}Session{{ end }}
+<a href="/">Back to home</a>
+<h1>Session</h1>
 
-{{ define "content" }}
-  <a href="/">Back to home</a>
-  <h1>Session</h1>
+{{ range $key, $val := flashes }}
+  <p>{{ $key }}: {{ $val }}</p>
+{{ end }}
 
-  {{ range $key, $val := flashes }}
-    <p>{{ $key }}: {{ $val }}</p>
-  {{ end }}
+<form action="/session" method="POST">
+  {{ csrf }}
+  <div>
+    <label for="session">Session</label>
+    <input type="text" id="session" name="session" placeholder="Enter a session message here">
+  </div>
 
-  <form action="/session" method="POST">
-    {{ csrf }}
-    <div>
-      <label for="session">Session</label>
-      <input type="text" id="session" name="session" placeholder="Enter a session message here">
-    </div>
+  <div>
+    <label for="flash">Flash</label>
+    <input type="text" id="flash" name="flash" placeholder="Enter a flash message here">
+  </div>
 
-    <div>
-      <label for="flash">Flash</label>
-      <input type="text" id="flash" name="flash" placeholder="Enter a flash message here">
-    </div>
+  <div>
+    <label for="error">Error (use this to force the handler to return an error)</label>
+    <input type="text" id="error" name="error" placeholder="Enter an error here">
+  </div>
 
-    <div>
-      <label for="error">Error (use this to force the handler to return an error)</label>
-      <input type="text" id="error" name="error" placeholder="Enter an error here">
-    </div>
+  <input type="submit" value="Submit"/>
+  <input type="submit" formaction="/session/reset" value="Clear all session data"/>
+</form>
 
-    <input type="submit" value="Submit"/>
-    <input type="submit" formaction="/session/reset" value="Clear all session data"/>
-  </form>
-
-  {{ with .Session }}
-    <p>{{ . }}</p>
-  {{ end }}
-
+{{ with .Session }}
+  <p>{{ . }}</p>
 {{ end }}

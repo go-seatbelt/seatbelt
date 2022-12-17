@@ -64,8 +64,10 @@ func New(o *Options) *Render {
 	mocks := make(map[string]interface{})
 	if o.Funcs != nil {
 		for _, fn := range o.Funcs {
-			for k := range fn(nil, nil) {
-				mocks[k] = func() template.HTML { return "" }
+			if fn != nil {
+				for k := range fn(nil, nil) {
+					mocks[k] = func() template.HTML { return "" }
+				}
 			}
 		}
 	}
@@ -137,12 +139,14 @@ func (r *Render) HTML(w io.Writer, req *http.Request, name string, data map[stri
 				mergedFuncMap := make(map[string]interface{})
 
 				for _, fn := range r.funcs {
-					m := fn(rw, req)
-					for k, v := range m {
-						if _, ok := mergedFuncMap[k]; ok {
-							fmt.Printf("[warning] seatbelt/render.HTML: func %s overrides existing func\n", k)
-						} else {
-							mergedFuncMap[k] = v
+					if fn != nil {
+						m := fn(rw, req)
+						for k, v := range m {
+							if _, ok := mergedFuncMap[k]; ok {
+								fmt.Printf("[warning] seatbelt/render.HTML: func %s overrides existing func\n", k)
+							} else {
+								mergedFuncMap[k] = v
+							}
 						}
 					}
 				}
@@ -155,7 +159,6 @@ func (r *Render) HTML(w io.Writer, req *http.Request, name string, data map[stri
 		for k, v := range o.Headers {
 			rw.Header().Set(k, v)
 		}
-		rw.WriteHeader(o.StatusCode)
 	}
 
 	// Even if the template isn't found, the given status code is respected.
