@@ -276,19 +276,6 @@ func defaultTemplateFuncs(session *session.Session) func(w http.ResponseWriter, 
 	}
 }
 
-// mergeFuncMaps merges the two given maps. If a collision occurs between the
-// two maps, m1 "wins", but will log a warning to say that the collision
-// occured.
-func mergeFuncMaps(m1, m2 map[string]interface{}) {
-	for k, v := range m2 {
-		if _, ok := m1[k]; ok {
-
-		} else {
-			m1[k] = v
-		}
-	}
-}
-
 // New returns a new instance of a Seatbelt application.
 func New(opts ...Option) *App {
 	var opt Option
