@@ -8,6 +8,7 @@
   <title>{{ $title := partial "title" }}{{ with $title }}{{ . }}{{ else }}test{{ end }}</title>
 </head>
 <body>
+  <div>{{ .Name }}</div>
   {{ yield }}
   <script src='{{ versionpath "/public/js/main.js" }}'></script>
 </body>
