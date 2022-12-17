@@ -3,18 +3,14 @@
 package render
 
 import (
-	"bytes"
 	"fmt"
 	"html/template"
 	"io"
-	"io/fs"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
-	"strings"
-	"sync"
+
+	"github.com/unrolled/render"
 )
 
 // A ContextualFuncMap is a function that returns an HTML template.FuncMap.
@@ -24,125 +20,76 @@ import (
 type ContextualFuncMap func(w http.ResponseWriter, r *http.Request) template.FuncMap
 
 type Render struct {
-	dir    string
-	mu     sync.Mutex
-	pool   sync.Pool
-	tpls   map[string]*template.Template
-	funcs  []ContextualFuncMap
-	reload bool
+	re    *render.Render
+	funcs []ContextualFuncMap
 }
 
 type Options struct {
-	Dir    string
-	Funcs  []ContextualFuncMap
+	// The directory to serve templates from. Default is "templates".
+	Dir string
+
+	// The template to use as a layout. Layouts can call {{ yield }}. Defaults
+	// to an empty string (meaning a layout is not used).
+	Layout string
+
+	// Request-scoped template funcs. Default is nil.
+	Funcs []ContextualFuncMap
+
+	// Whether or not to recompile templates. Default is false. Do not
+	// recompile templates in production, as this adds a significant
+	// performance penalty.
 	Reload bool
 }
 
-func New(o Options) *Render {
-	r := &Render{
-		dir: o.Dir,
-		pool: sync.Pool{
-			New: func() interface{} {
-				return &bytes.Buffer{}
-			},
-		},
-		funcs:  o.Funcs,
-		reload: o.Reload,
+func New(o *Options) *Render {
+	if o == nil {
+		o = &Options{}
 	}
 
-	r.mu.Lock()
-	if err := r.parseTemplates(); err != nil {
-		log.Fatalln("[fatal] failed to parse templates:", err)
-	}
-	r.mu.Unlock()
+	// TODO Consider adding a preprocessing step to:
+	//
+	// 	* Automatically add the required templates suffixes within the
+	//	  `define` blocks.
+	//	* Allow for a default value for the `{{ partial }}` helper func,
+	//	  potentially something that expands
+	//		{{ partial "title" "fallback "}}
+	//	  to
+	//		{{ $title := partial "title" }}
+	//		{{ with $title }}{{ . }}{{ else }}fallback{{ end }}
+	//	  which is painfully verbose.
 
-	return r
-}
-
-func (r *Render) parseTemplates() error {
-	if r.tpls == nil {
-		r.tpls = make(map[string]*template.Template)
-	}
-
-	dirfs := os.DirFS(r.dir)
-
-	// Parse the layout template in order to clone it for each template later.
-	// Because template functions may be defined in the layout, we also need
-	// to add them prior to actually doing any parsing.
-	basetpl := template.New("layout")
-
-	// Define an initial map of template funcs as no-ops. This will be passed
-	// to templates **before** parsing in order to prevent a "function not
-	// defined" error. This func map is redefined when templates are rendered,
-	// and is provided with request-specific information.
-	if r.funcs != nil {
-		noopFuncMap := make(map[string]interface{})
-		for _, fn := range r.funcs {
+	// Mock the template funcs by passing in the user-defined template funcs
+	// as no-ops in order for the templates to compile successfully. The real
+	// implementations are injected at render time.
+	mocks := make(map[string]interface{})
+	if o.Funcs != nil {
+		for _, fn := range o.Funcs {
 			if fn != nil {
-				for name := range fn(nil, nil) {
-					noopFuncMap[name] = func() struct{} { return struct{}{} }
+				for k := range fn(nil, nil) {
+					mocks[k] = func() template.HTML { return "" }
 				}
 			}
 		}
-		basetpl.Funcs(noopFuncMap)
 	}
 
-	ltpl, err := basetpl.ParseFS(dirfs, "layout.html")
-	if err != nil {
-		log.Fatalln("[error] parsing layout template", err)
-		return err
-	}
-
-	rootDir := "."
-	return fs.WalkDir(dirfs, rootDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if d == nil || d.IsDir() {
-			return nil
-		}
-
-		rel, err := filepath.Rel(rootDir, path)
-		if err != nil {
-			return err
-		}
-
-		ext := ""
-		if strings.Contains(rel, ".") {
-			ext = filepath.Ext(rel)
-		}
-		if ext != ".html" {
-			log.Fatalf("[error] template %s must end in .html, got %s\n", path, ext)
-			return fmt.Errorf("template %s must end in .html, got %s", path, ext)
-		}
-
-		name := rel[0 : len(rel)-len(ext)]
-
-		// On Windows, replace the OS-specific path separator "\" with the
-		// conventional Linux/Mac one.
-		name = strings.Replace(name, `\`, "/", -1)
-
-		clone, err := ltpl.Clone()
-		if err != nil {
-			log.Println("[info] failed to clone layout tempalate", err)
-			return err
-		}
-
-		_, err = clone.ParseFS(dirfs, path)
-		if err != nil {
-			log.Fatalf("[error] failed to parse template %s at path %s: %#v", name, path, err)
-			return fmt.Errorf("failed to parse template %s at path %s: %w", name, path, err)
-		}
-
-		r.tpls[name] = clone
-
-		return nil
+	re := render.New(render.Options{
+		Directory:     o.Dir,
+		Layout:        o.Layout,
+		Extensions:    []string{".html"},
+		IsDevelopment: o.Reload,
+		Funcs:         []template.FuncMap{mocks},
 	})
+
+	return &Render{
+		re:    re,
+		funcs: o.Funcs,
+	}
 }
 
 type RenderOptions struct {
+	Layout     string
 	StatusCode int
+	Headers    map[string]string
 }
 
 func (r *RenderOptions) setDefaults() {
@@ -162,17 +109,6 @@ func (r *Render) TextError(w io.Writer, error string, code int) {
 	w.Write([]byte(error))
 }
 
-// DefinedTemplates returns a comma-separated string containing the names of
-// all defined templates. Used to generate an error message, but can also be
-// used for debugging.
-func (r *Render) DefinedTemplates() string {
-	names := make([]string, 0, len(r.tpls))
-	for name := range r.tpls {
-		names = append(names, name)
-	}
-	return strings.Join(names, ",")
-}
-
 // HTML renders the HTML template with the given name. The HTTP request is
 // optional, and can be set to nil. It is only used to add request-specific
 // context to HTML template functions.
@@ -183,35 +119,16 @@ func (r *Render) HTML(w io.Writer, req *http.Request, name string, data map[stri
 	}
 	o.setDefaults()
 
-	b := r.pool.Get().(*bytes.Buffer)
-	b.Reset()
-	defer r.pool.Put(b)
-
-	if r.reload {
-		r.mu.Lock()
-		r.parseTemplates()
-		r.mu.Unlock()
-	}
-
-	if r.reload {
-		r.mu.Lock()
-	}
-	tpl, ok := r.tpls[name]
-	if r.reload {
-		r.mu.Unlock()
-	}
-
-	if !ok {
-		msg := fmt.Sprintf(`no template named "%s", defined templates are %s`,
-			name, r.DefinedTemplates())
-		r.TextError(w, msg, http.StatusInternalServerError)
-		return
-	}
-
 	// Prevent read from nil errors by ensuring the map is always initialized.
+	//
+	// TODO In Seatbelt, this should come from the newly propsed `Values`
+	// feature.
 	if data == nil {
 		data = make(map[string]interface{})
 	}
+
+	// Prepare the render options.
+	htmlOpts := render.HTMLOptions{Layout: o.Layout}
 
 	// Add the template funcs, providing the context of the current request,
 	// if one is provided.
@@ -219,26 +136,40 @@ func (r *Render) HTML(w io.Writer, req *http.Request, name string, data map[stri
 	if ok {
 		if req != nil {
 			if r.funcs != nil {
+				mergedFuncMap := make(map[string]interface{})
+
 				for _, fn := range r.funcs {
 					if fn != nil {
-						tpl.Funcs(fn(rw, req))
+						m := fn(rw, req)
+						for k, v := range m {
+							if _, ok := mergedFuncMap[k]; ok {
+								fmt.Printf("[warning] seatbelt/render.HTML: func %s overrides existing func\n", k)
+							} else {
+								mergedFuncMap[k] = v
+							}
+						}
 					}
 				}
+
+				htmlOpts.Funcs = mergedFuncMap
 			}
 		}
 	}
-
-	if err := tpl.ExecuteTemplate(b, "layout.html", data); err != nil {
-		log.Printf("[error] failed to execute template %s: %v", name, err)
-		r.TextError(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	if ok {
-		rw.Header().Set("Content-Type", "text/html")
-		rw.WriteHeader(o.StatusCode)
+		for k, v := range o.Headers {
+			rw.Header().Set(k, v)
+		}
 	}
-	if _, err := b.WriteTo(w); err != nil {
-		log.Println("[error] failed to write response:", err)
+
+	// Even if the template isn't found, the given status code is respected.
+	// This is somewhat confusing, but works better in a
+	// Turbo (https://turbo.hotwired.dev/) context because it causes the error
+	// page rendered by unrolled/render to actually show  up instead of being
+	// silently dropped due to the >=400 level status code.
+	//
+	// If an error occurs, the reponse has already been written meaning that
+	// it's too late to intervene, so the best we can do is log it.
+	if err := r.re.HTML(w, o.StatusCode, name, data, htmlOpts); err != nil {
+		log.Printf("seatbelt/render: failed to render template: %v", err)
 	}
 }
