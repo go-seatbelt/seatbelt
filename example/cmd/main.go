@@ -13,6 +13,15 @@ func main() {
 		Reload:      true,
 	})
 
+	app.Use(func(fn func(ctx *seatbelt.Context) error) func(*seatbelt.Context) error {
+		const name = "me"
+
+		return func(ctx *seatbelt.Context) error {
+			ctx.SetValue("Name", name)
+			return fn(ctx)
+		}
+	})
+
 	app.Get("/", func(c *seatbelt.Context) error {
 		return c.Render("index", nil)
 	})

@@ -35,6 +35,7 @@ type Context struct {
 	w        http.ResponseWriter
 	session  *session.Session
 	renderer *render.Render
+	values   map[string]any
 }
 
 func (c *Context) Params(v interface{}) error {
@@ -81,13 +82,69 @@ func (c *Context) NoContent() error {
 	return nil
 }
 
+// SetValue sets the given key value pair on the request. These values are
+// passed to every HTML template by merging them with the given `data`.
+func (c *Context) SetValue(key string, value any) {
+	if c.values == nil {
+		c.values = make(map[string]any)
+	}
+	c.values[key] = value
+}
+
+// GetValue returns the request-scoped value with the given key.
+func (c *Context) GetValue(key string) any {
+	if c.values != nil {
+		return c.values[key]
+	}
+	return nil
+}
+
+// ListValues returns all request-scoped values.
+func (c *Context) ListValues() map[string]any {
+	if c.values != nil {
+		return c.values
+	}
+	return nil
+}
+
+// DeleteValue deletes the given request-scoped value.
+func (c *Context) DeleteValue(key string) {
+	if c.values != nil {
+		delete(c.values, key)
+	}
+}
+
+func (c *Context) mergeValues(data map[string]interface{}) map[string]interface{} {
+	if c.values == nil {
+		return data
+	}
+
+	if data == nil {
+		return c.values
+	}
+
+	for k, v := range c.values {
+		if _, ok := data[k]; !ok {
+			data[k] = v
+		}
+	}
+	return data
+}
+
 // Render renders an HTML template.
 //
-// TODO: It will never return an error, instead, any errors are rendered in
-// the response and logged. This is probably not the ideal behaviour for a
-// production environment.
+// If there are any request-scoped values present on the request, they will
+// be merged with the given data, with the data taking precendence in case of
+// key collisions.
+//
+// Render will never return an error, and only has the function signature as a
+// convenience for writing shorter handlers, for example,
+//
+//	func ShowNewUser(c *seatbelt.Context) error {
+//		return c.Render("users/new", nil)
+//	}
 func (c *Context) Render(name string, data map[string]interface{}, opts ...render.RenderOptions) error {
-	c.renderer.HTML(c.w, c.r, name, data, opts...)
+	c.renderer.HTML(c.w, c.r, name, c.mergeValues(data), opts...)
 	return nil
 }
 
