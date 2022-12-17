@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ block "title" . }}test{{ end }}</title>
+  <title>{{ $title := partial "title" }}{{ with $title }}{{ . }}{{ else }}layout{{ end }}</title>
 </head>
 <body>
-  {{ block "content" . }}<p>Hello</p>{{ end }}
+  {{ yield }}
 </body>
 </html>
+{{ define "title "}}test{{ end }}
