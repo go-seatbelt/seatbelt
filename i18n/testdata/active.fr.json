@@ -1,0 +1,6 @@
+{
+  "PersonCats": {
+    "one": "{{.Name}} a {{.Count}} chat.",
+    "other": "{{.Name}} a {{.Count}} chats."
+  }
+}

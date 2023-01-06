@@ -1,0 +1,14 @@
+{
+  "Home": {
+    "other": "Maison"
+  },
+  "Hello": {
+    "other": "Salut"
+  },
+  "WelcomeMessage": {
+    "other": "Bienvenue à Seatbelt. Voici un application qui démontre tout que le framework peut faire."
+  },
+  "SessionData": {
+    "other": "Voire et définir les données de session"
+  }
+}

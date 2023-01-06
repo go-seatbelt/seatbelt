@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/go-seatbelt/seatbelt/handler"
+	"github.com/go-seatbelt/seatbelt/i18n"
 	"github.com/go-seatbelt/seatbelt/render"
 	"github.com/go-seatbelt/seatbelt/session"
 
@@ -30,12 +31,23 @@ func ChiPathParamFunc(r *http.Request, values map[string]interface{}) {
 	}
 }
 
+type ContextI18N struct {
+	r    *http.Request
+	i18n *i18n.Translator
+}
+
+func (ci *ContextI18N) T(id string, data map[string]any, count ...int) string {
+	return ci.i18n.T(ci.r, id, data, count...)
+}
+
 type Context struct {
 	r        *http.Request
 	w        http.ResponseWriter
 	session  *session.Session
 	renderer *render.Render
 	values   map[string]any
+
+	I18N *ContextI18N
 }
 
 func (c *Context) Params(v interface{}) error {
@@ -215,9 +227,10 @@ type App struct {
 	// The signing key for the session and CSRF cookies.
 	signingKey []byte
 
-	// First party dependencies on the session and render packages.
+	// First party dependencies on the session, render, and i18n packages.
 	session  *session.Session
 	renderer *render.Render
+	i18n     *i18n.Translator
 
 	// The HTTP router and its configuration options.
 	mux          chi.Router
@@ -232,6 +245,9 @@ type MiddlewareFunc func(fn func(ctx *Context) error) func(*Context) error
 type Option struct {
 	// The directory containing your HTML templates.
 	TemplateDir string
+
+	// The directory containing your i18n data.
+	LocaleDir string
 
 	// The signing key for the session cookie store.
 	SigningKey string
@@ -298,9 +314,12 @@ func (o *Option) setMasterKey() {
 
 // defaultTemplateFuncs sets default HTML template functions on each request
 // context.
-func defaultTemplateFuncs(session *session.Session) func(w http.ResponseWriter, r *http.Request) template.FuncMap {
+func defaultTemplateFuncs(session *session.Session, translator *i18n.Translator) func(w http.ResponseWriter, r *http.Request) template.FuncMap {
 	return func(w http.ResponseWriter, r *http.Request) template.FuncMap {
 		return template.FuncMap{
+			"t": func(id string, data map[string]interface{}, pluralCount ...int) string {
+				return translator.T(r, id, data, pluralCount...)
+			},
 			"csrf": func() template.HTML {
 				return csrf.TemplateField(r)
 			},
@@ -346,6 +365,8 @@ func New(opts ...Option) *App {
 		log.Fatalf("seatbelt: signing key is not a valid hexadecimal string: %+v", err)
 	}
 
+	translator := i18n.New(opt.LocaleDir)
+
 	// Initialize the underlying chi mux so that we can setup our default
 	// middleware stack.
 	mux := chi.NewRouter()
@@ -356,7 +377,7 @@ func New(opts ...Option) *App {
 		MaxAge: opt.SessionMaxAge,
 	})
 
-	funcMaps := []render.ContextualFuncMap{defaultTemplateFuncs(sess)}
+	funcMaps := []render.ContextualFuncMap{defaultTemplateFuncs(sess, translator)}
 	if opt.Funcs != nil {
 		funcMaps = append(funcMaps, opt.Funcs)
 	}
@@ -371,6 +392,7 @@ func New(opts ...Option) *App {
 			Reload: opt.Reload,
 			Funcs:  funcMaps,
 		}),
+		i18n: translator,
 	}
 
 	if !opt.SkipServeFiles {
@@ -432,7 +454,14 @@ func (a *App) handleErr(c *Context, err error) {
 
 // serveContext creates and registers a Seatbelt handler for an HTTP request.
 func (a *App) serveContext(w http.ResponseWriter, r *http.Request, handle func(c *Context) error) {
-	c := &Context{w: w, r: r, session: a.session, renderer: a.renderer}
+	c := &Context{
+		w: w, r: r,
+		session: a.session, renderer: a.renderer,
+		I18N: &ContextI18N{
+			r:    r,
+			i18n: a.i18n,
+		},
+	}
 
 	// Iterate over the middleware in reverse order, so that the order
 	// in which middleware is registered suggests that it is run from
