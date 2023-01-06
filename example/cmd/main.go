@@ -11,6 +11,7 @@ func main() {
 	app := seatbelt.New(seatbelt.Option{
 		TemplateDir: "templates",
 		Reload:      true,
+		LocaleDir:   "locales",
 	})
 
 	app.Use(func(fn func(ctx *seatbelt.Context) error) func(*seatbelt.Context) error {
@@ -57,6 +58,10 @@ func main() {
 	app.Post("/session/reset", func(c *seatbelt.Context) error {
 		c.Reset()
 		return c.Redirect("/session")
+	})
+
+	app.Get("/txt", func(c *seatbelt.Context) error {
+		return c.String(200, c.I18N.T("Hello", nil))
 	})
 
 	log.Fatalln(app.Start(":3000"))

@@ -1,4 +1,5 @@
-{{ define "title-index" }}Home{{ end }}
-<h1 class="title">Hello!</h1>
-<p>Welcome to Seatbelt. This is a sample application that shows off all the framework can do.</p>
-<a href="/session">Set and view session data</a>
+{{ define "title-index" }}{{ t "Home" . }}{{ end }}
+<h1 class="title">{{ t "Hello" . }}</h1>
+<p>{{ t "WelcomeMessage" . }}</p>
+<a href="/session">{{ t "SessionData" . }}</a>
+<a href="/txt">Plaintext link</a>
