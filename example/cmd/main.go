@@ -17,9 +17,9 @@ func main() {
 	app.Use(func(fn func(ctx *seatbelt.Context) error) func(*seatbelt.Context) error {
 		const name = "me"
 
-		return func(ctx *seatbelt.Context) error {
-			ctx.SetValue("Name", name)
-			return fn(ctx)
+		return func(c *seatbelt.Context) error {
+			c.Values.Set("Name", name)
+			return fn(c)
 		}
 	})
 
@@ -28,7 +28,7 @@ func main() {
 	})
 	app.Get("/session", func(c *seatbelt.Context) error {
 		return c.Render("session", map[string]interface{}{
-			"Session": c.Get("session"),
+			"Session": c.Session.Get("session"),
 		})
 	})
 	app.Post("/session", func(c *seatbelt.Context) error {
@@ -46,17 +46,17 @@ func main() {
 		}
 
 		if v.Session != "" {
-			c.Set("session", v.Session)
+			c.Session.Set("session", v.Session)
 		}
 		if v.Flash != "" {
-			c.Flash("notice", v.Flash)
+			c.Flash.Add("notice", v.Flash)
 		}
 
 		return c.Redirect("/session")
 	})
 
 	app.Post("/session/reset", func(c *seatbelt.Context) error {
-		c.Reset()
+		c.Session.Reset()
 		return c.Redirect("/session")
 	})
 
