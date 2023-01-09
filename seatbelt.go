@@ -16,6 +16,7 @@ import (
 	"github.com/go-seatbelt/seatbelt/i18n"
 	"github.com/go-seatbelt/seatbelt/render"
 	"github.com/go-seatbelt/seatbelt/session"
+	"github.com/go-seatbelt/seatbelt/values"
 
 	"github.com/go-chi/chi"
 	"github.com/gorilla/csrf"
@@ -35,7 +36,7 @@ type context struct {
 	r        *http.Request
 	w        http.ResponseWriter
 	i18n     *i18n.Translator
-	values   map[string]any
+	values   *values.Values
 	session  *session.Session
 	renderer *render.Render
 }
@@ -43,7 +44,7 @@ type context struct {
 type ContextI18N context
 
 func (c *ContextI18N) T(id string, data map[string]any, count ...int) string {
-	return c.i18n.T(c.r, id, data, count...)
+	return c.i18n.T(c.r, id, mergeMaps(c.values.List(), data), count...)
 }
 
 type ContextValues context
@@ -51,33 +52,22 @@ type ContextValues context
 // Set sets the given key value pair on the request. These values are
 // passed to every HTML template by merging them with the given `data`.
 func (c *ContextValues) Set(key string, value any) {
-	if c.values == nil {
-		c.values = make(map[string]any)
-	}
-	c.values[key] = value
+	c.values.Set(key, value)
 }
 
 // Get returns the request-scoped value with the given key.
 func (c *ContextValues) Get(key string) any {
-	if c.values != nil {
-		return c.values[key]
-	}
-	return nil
+	return c.values.Get(key)
 }
 
 // List returns all request-scoped values.
 func (c *ContextValues) List() map[string]any {
-	if c.values != nil {
-		return c.values
-	}
-	return nil
+	return c.values.List()
 }
 
 // Delete deletes the given request-scoped value.
 func (c *ContextValues) Delete(key string) {
-	if c.values != nil {
-		delete(c.values, key)
-	}
+	c.values.Delete(key)
 }
 
 type ContextSession context
@@ -177,21 +167,23 @@ func (c *context) GetIP() string {
 	return c.r.RemoteAddr
 }
 
-func (c *context) mergeValues(data map[string]interface{}) map[string]interface{} {
-	if c.values == nil {
-		return data
+// mergeMaps merges the values of m2 into m1. If a value in m2 has the same
+// key as in m1, the key in m1 takes precedence.
+func mergeMaps(m1, m2 map[string]interface{}) map[string]interface{} {
+	if m1 == nil {
+		return m2
+	}
+	if m2 == nil {
+		return m1
 	}
 
-	if data == nil {
-		return c.values
-	}
-
-	for k, v := range c.values {
-		if _, ok := data[k]; !ok {
-			data[k] = v
+	for k, v := range m2 {
+		if _, ok := m1[k]; !ok {
+			m1[k] = v
 		}
 	}
-	return data
+
+	return m1
 }
 
 // Render renders an HTML template.
@@ -207,7 +199,7 @@ func (c *context) mergeValues(data map[string]interface{}) map[string]interface{
 //		return c.Render("users/new", nil)
 //	}
 func (c *context) Render(name string, data map[string]interface{}, opts ...render.RenderOptions) error {
-	c.renderer.HTML(c.w, c.r, name, c.mergeValues(data), opts...)
+	c.renderer.HTML(c.w, c.r, name, mergeMaps(c.values.List(), data), opts...)
 	return nil
 }
 
@@ -341,7 +333,8 @@ func defaultTemplateFuncs(session *session.Session, translator *i18n.Translator)
 	return func(w http.ResponseWriter, r *http.Request) template.FuncMap {
 		return template.FuncMap{
 			"t": func(id string, data map[string]interface{}, pluralCount ...int) string {
-				return translator.T(r, id, data, pluralCount...)
+				vals := values.New(r).List()
+				return translator.T(r, id, mergeMaps(vals, data), pluralCount...)
 			},
 			"csrf": func() template.HTML {
 				return csrf.TemplateField(r)
@@ -477,7 +470,14 @@ func (a *App) handleErr(c *Context, err error) {
 
 // serveContext creates and registers a Seatbelt handler for an HTTP request.
 func (a *App) serveContext(w http.ResponseWriter, r *http.Request, handle func(c *Context) error) {
-	common := &context{w: w, r: r, session: a.session, renderer: a.renderer, i18n: a.i18n}
+	common := &context{
+		w:        w,
+		r:        r,
+		i18n:     a.i18n,
+		values:   values.New(r),
+		session:  a.session,
+		renderer: a.renderer,
+	}
 
 	c := &Context{
 		context: *common,

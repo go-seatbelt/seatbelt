@@ -5,6 +5,9 @@
   "Hello": {
     "other": "Salut"
   },
+  "Greet": {
+    "other": "Salut, {{ .Name }}"
+  },
   "WelcomeMessage": {
     "other": "Bienvenue à Seatbelt. Voici un application qui démontre tout que le framework peut faire."
   },

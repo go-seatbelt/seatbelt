@@ -61,7 +61,7 @@ func main() {
 	})
 
 	app.Get("/txt", func(c *seatbelt.Context) error {
-		return c.String(200, c.I18N.T("Hello", nil))
+		return c.String(200, c.I18N.T("Greet", nil))
 	})
 
 	log.Fatalln(app.Start(":3000"))
