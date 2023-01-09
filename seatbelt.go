@@ -16,6 +16,7 @@ import (
 	"github.com/go-seatbelt/seatbelt/i18n"
 	"github.com/go-seatbelt/seatbelt/render"
 	"github.com/go-seatbelt/seatbelt/session"
+	"github.com/go-seatbelt/seatbelt/values"
 
 	"github.com/go-chi/chi"
 	"github.com/gorilla/csrf"
@@ -31,56 +32,115 @@ func ChiPathParamFunc(r *http.Request, values map[string]interface{}) {
 	}
 }
 
-type ContextI18N struct {
-	r    *http.Request
-	i18n *i18n.Translator
-}
-
-func (ci *ContextI18N) T(id string, data map[string]any, count ...int) string {
-	return ci.i18n.T(ci.r, id, data, count...)
-}
-
-type Context struct {
+type context struct {
 	r        *http.Request
 	w        http.ResponseWriter
+	i18n     *i18n.Translator
+	values   *values.Values
 	session  *session.Session
 	renderer *render.Render
-	values   map[string]any
-
-	I18N *ContextI18N
 }
 
-func (c *Context) Params(v interface{}) error {
+type ContextI18N context
+
+func (c *ContextI18N) T(id string, data map[string]any, count ...int) string {
+	return c.i18n.T(c.r, id, mergeMaps(c.values.List(), data), count...)
+}
+
+type ContextValues context
+
+// Set sets the given key value pair on the request. These values are
+// passed to every HTML template by merging them with the given `data`.
+func (c *ContextValues) Set(key string, value any) {
+	c.values.Set(key, value)
+}
+
+// Get returns the request-scoped value with the given key.
+func (c *ContextValues) Get(key string) any {
+	return c.values.Get(key)
+}
+
+// List returns all request-scoped values.
+func (c *ContextValues) List() map[string]any {
+	return c.values.List()
+}
+
+// Delete deletes the given request-scoped value.
+func (c *ContextValues) Delete(key string) {
+	c.values.Delete(key)
+}
+
+type ContextSession context
+
+// Set sets or updates the given value on the session.
+func (c *ContextSession) Set(key string, value interface{}) {
+	c.session.Set(c.w, c.r, key, value)
+}
+
+// Get returns the value associated with the given key in the request session.
+func (c *ContextSession) Get(key string) interface{} {
+	return c.session.Get(c.r, key)
+}
+
+// List returns all key value pairs of session data from the given request.
+func (c *ContextSession) List() map[string]interface{} {
+	return c.session.List(c.r)
+}
+
+// Delete deletes the session data with the given key. The deleted session
+// data is returned.
+func (c *ContextSession) Delete(key string) interface{} {
+	return c.session.Delete(c.w, c.r, key)
+}
+
+// Reset deletes all values from the session data.
+func (c *ContextSession) Reset() {
+	c.session.Reset(c.w, c.r)
+}
+
+type ContextFlash context
+
+// Flash adds a flash message on a request.
+func (c *ContextFlash) Add(key string, value interface{}) {
+	c.session.Flash(c.w, c.r, key, value)
+}
+
+// List returns all flash messages, clearing all saved flashes.
+func (c *ContextFlash) List() map[string]interface{} {
+	return c.session.Flashes(c.w, c.r)
+}
+
+func (c *context) Params(v interface{}) error {
 	return handler.Params(c.w, c.r, ChiPathParamFunc, v)
 }
 
-func (c *Context) Redirect(url string) error {
+func (c *context) Redirect(url string) error {
 	handler.Redirect(c.w, c.r, url)
 	return nil
 }
 
 // PathParam returns the path param with the given name.
-func (c *Context) PathParam(name string) string {
+func (c *context) PathParam(name string) string {
 	return chi.URLParam(c.r, name)
 }
 
 // FormValue returns the form value with the given name.
-func (c *Context) FormValue(name string) string {
+func (c *context) FormValue(name string) string {
 	return c.r.FormValue(name)
 }
 
 // QueryParam returns the URL query parameter with the given name.
-func (c *Context) QueryParam(name string) string {
+func (c *context) QueryParam(name string) string {
 	return c.r.URL.Query().Get(name)
 }
 
 // JSON renders a JSON response with the given status code and data.
-func (c *Context) JSON(code int, v interface{}) error {
+func (c *context) JSON(code int, v interface{}) error {
 	return handler.JSON(c.w, code, v)
 }
 
 // String sends a string response with the given status code.
-func (c *Context) String(code int, s string) error {
+func (c *context) String(code int, s string) error {
 	c.w.Header().Set("Content-Type", "text/plain")
 	c.w.WriteHeader(code)
 	_, err := c.w.Write([]byte(s))
@@ -89,58 +149,41 @@ func (c *Context) String(code int, s string) error {
 
 // NoContent sends a 204 No Content HTTP response. It will always return a nil
 // error.
-func (c *Context) NoContent() error {
+func (c *context) NoContent() error {
 	c.w.WriteHeader(204)
 	return nil
 }
 
-// SetValue sets the given key value pair on the request. These values are
-// passed to every HTML template by merging them with the given `data`.
-func (c *Context) SetValue(key string, value any) {
-	if c.values == nil {
-		c.values = make(map[string]any)
+// GetIP attempts to return the request's IP address, first by checking the
+// `X-Real-Ip` header, then the `X-Forwarded-For` header, and finally falling
+// back to the request's `RemoteAddr`.
+func (c *context) GetIP() string {
+	if ip := c.r.Header.Get("X-Real-Ip"); ip != "" {
+		return ip
 	}
-	c.values[key] = value
+	if ip := c.r.Header.Get("X-Forwarded-For"); ip != "" {
+		return ip
+	}
+	return c.r.RemoteAddr
 }
 
-// GetValue returns the request-scoped value with the given key.
-func (c *Context) GetValue(key string) any {
-	if c.values != nil {
-		return c.values[key]
+// mergeMaps merges the values of m2 into m1. If a value in m2 has the same
+// key as in m1, the key in m1 takes precedence.
+func mergeMaps(m1, m2 map[string]interface{}) map[string]interface{} {
+	if m1 == nil {
+		return m2
 	}
-	return nil
-}
-
-// ListValues returns all request-scoped values.
-func (c *Context) ListValues() map[string]any {
-	if c.values != nil {
-		return c.values
-	}
-	return nil
-}
-
-// DeleteValue deletes the given request-scoped value.
-func (c *Context) DeleteValue(key string) {
-	if c.values != nil {
-		delete(c.values, key)
-	}
-}
-
-func (c *Context) mergeValues(data map[string]interface{}) map[string]interface{} {
-	if c.values == nil {
-		return data
+	if m2 == nil {
+		return m1
 	}
 
-	if data == nil {
-		return c.values
-	}
-
-	for k, v := range c.values {
-		if _, ok := data[k]; !ok {
-			data[k] = v
+	for k, v := range m2 {
+		if _, ok := m1[k]; !ok {
+			m1[k] = v
 		}
 	}
-	return data
+
+	return m1
 }
 
 // Render renders an HTML template.
@@ -155,57 +198,29 @@ func (c *Context) mergeValues(data map[string]interface{}) map[string]interface{
 //	func ShowNewUser(c *seatbelt.Context) error {
 //		return c.Render("users/new", nil)
 //	}
-func (c *Context) Render(name string, data map[string]interface{}, opts ...render.RenderOptions) error {
-	c.renderer.HTML(c.w, c.r, name, c.mergeValues(data), opts...)
+func (c *context) Render(name string, data map[string]interface{}, opts ...render.RenderOptions) error {
+	c.renderer.HTML(c.w, c.r, name, mergeMaps(c.values.List(), data), opts...)
 	return nil
-}
-
-// Set sets or updates the given value on the session.
-func (c *Context) Set(key string, value interface{}) {
-	c.session.Set(c.w, c.r, key, value)
-}
-
-// Get returns the value associated with the given key in the request session.
-func (c *Context) Get(key string) interface{} {
-	return c.session.Get(c.r, key)
-}
-
-// List returns all key value pairs of session data from the given request.
-func (c *Context) List() map[string]interface{} {
-	return c.session.List(c.r)
-}
-
-// Delete deletes the session data with the given key. The deleted session
-// data is returned.
-func (c *Context) Delete(key string) interface{} {
-	return c.session.Delete(c.w, c.r, key)
-}
-
-// Reset deletes all values from the session data.
-func (c *Context) Reset() {
-	c.session.Reset(c.w, c.r)
-}
-
-// Flash sets a flash message on a request.
-func (c *Context) Flash(key string, value interface{}) {
-	c.session.Flash(c.w, c.r, key, value)
-}
-
-// Flashes returns all flash messages, clearing all saved flashes.
-func (c *Context) Flashes() map[string]interface{} {
-	return c.session.Flashes(c.w, c.r)
 }
 
 // Request returns the underlying *http.Request belonging to the current
 // request context.
-func (c *Context) Request() *http.Request {
+func (c *context) Request() *http.Request {
 	return c.r
 }
 
 // Response returns the underlying http.ResponseWriter belonging to the
 // current request context.
-func (c *Context) Response() http.ResponseWriter {
+func (c *context) Response() http.ResponseWriter {
 	return c.w
+}
+
+type Context struct {
+	context
+	I18N    *ContextI18N
+	Flash   *ContextFlash
+	Values  *ContextValues
+	Session *ContextSession
 }
 
 // An App contains the data necessary to start and run an application.
@@ -228,9 +243,9 @@ type App struct {
 	signingKey []byte
 
 	// First party dependencies on the session, render, and i18n packages.
+	i18n     *i18n.Translator
 	session  *session.Session
 	renderer *render.Render
-	i18n     *i18n.Translator
 
 	// The HTTP router and its configuration options.
 	mux          chi.Router
@@ -318,7 +333,8 @@ func defaultTemplateFuncs(session *session.Session, translator *i18n.Translator)
 	return func(w http.ResponseWriter, r *http.Request) template.FuncMap {
 		return template.FuncMap{
 			"t": func(id string, data map[string]interface{}, pluralCount ...int) string {
-				return translator.T(r, id, data, pluralCount...)
+				vals := values.New(r).List()
+				return translator.T(r, id, mergeMaps(vals, data), pluralCount...)
 			},
 			"csrf": func() template.HTML {
 				return csrf.TemplateField(r)
@@ -365,7 +381,7 @@ func New(opts ...Option) *App {
 		log.Fatalf("seatbelt: signing key is not a valid hexadecimal string: %+v", err)
 	}
 
-	translator := i18n.New(opt.LocaleDir)
+	translator := i18n.New(opt.LocaleDir, opt.Reload)
 
 	// Initialize the underlying chi mux so that we can setup our default
 	// middleware stack.
@@ -447,20 +463,28 @@ func (a *App) handleErr(c *Context, err error) {
 		c.String(http.StatusInternalServerError, err.Error())
 	default:
 		from := c.r.Referer()
-		c.Flash("alert", err.Error())
+		c.Flash.Add("alert", err.Error())
 		c.Redirect(from)
 	}
 }
 
 // serveContext creates and registers a Seatbelt handler for an HTTP request.
 func (a *App) serveContext(w http.ResponseWriter, r *http.Request, handle func(c *Context) error) {
+	common := &context{
+		w:        w,
+		r:        r,
+		i18n:     a.i18n,
+		values:   values.New(r),
+		session:  a.session,
+		renderer: a.renderer,
+	}
+
 	c := &Context{
-		w: w, r: r,
-		session: a.session, renderer: a.renderer,
-		I18N: &ContextI18N{
-			r:    r,
-			i18n: a.i18n,
-		},
+		context: *common,
+		I18N:    (*ContextI18N)(common),
+		Flash:   (*ContextFlash)(common),
+		Values:  (*ContextValues)(common),
+		Session: (*ContextSession)(common),
 	}
 
 	// Iterate over the middleware in reverse order, so that the order

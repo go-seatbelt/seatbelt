@@ -7,7 +7,7 @@ import (
 )
 
 func TestTranslator(t *testing.T) {
-	translator := New("testdata")
+	translator := New("testdata", false)
 
 	req := httptest.NewRequest(http.MethodGet, "/?locale=fr", nil)
 
