@@ -22,6 +22,9 @@ import (
 	"github.com/gorilla/csrf"
 )
 
+// Version is the version of the Seatbelt package.
+const Version = "v0.2.0"
+
 // ChiPathParamFunc extracts path parameters from the given HTTP request using
 // the github.com/go-chi/chi router.
 func ChiPathParamFunc(r *http.Request, values map[string]interface{}) {
