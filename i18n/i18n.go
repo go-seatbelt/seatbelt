@@ -11,35 +11,42 @@ import (
 )
 
 type Translator struct {
-	path   string
-	bundle *i18n.Bundle
+	path          string
+	bundle        *i18n.Bundle
+	isDevelopment bool
 }
 
 // New creates a new instance of a translator from the given file path.
-func New(path string) *Translator {
+func New(path string, isDevelopment bool) *Translator {
 	bundle := i18n.NewBundle(language.English)
 	bundle.RegisterUnmarshalFunc("json", json.Unmarshal)
 
+	translator := &Translator{
+		path:          path,
+		bundle:        bundle,
+		isDevelopment: isDevelopment,
+	}
+	translator.parseTranslationFiles()
+
+	return translator
+}
+
+func (t *Translator) parseTranslationFiles() {
 	// If the path is an empty string, we'll fall back to the default bundle,
 	// which will output the "translation missing" error for every string.
 	// Otherwise, load the translation data from the given filepath.
-	if path != "" {
-		if err := filepath.Walk(path, func(filepath string, info os.FileInfo, _ error) error {
+	if t.path != "" {
+		if err := filepath.Walk(t.path, func(filepath string, info os.FileInfo, _ error) error {
 			if info == nil || info.IsDir() {
 				return nil
 			}
 			// TODO Check file extension (or possibly regex of filename) so
 			// that it doesn't break on unintenionally added files.
-			_, err := bundle.LoadMessageFile(filepath)
+			_, err := t.bundle.LoadMessageFile(filepath)
 			return err
 		}); err != nil {
 			panic(err)
 		}
-	}
-
-	return &Translator{
-		path:   path,
-		bundle: bundle,
 	}
 }
 
@@ -47,6 +54,10 @@ func New(path string) *Translator {
 func (t *Translator) T(r *http.Request, id string, data map[string]interface{}, pluralCount ...int) string {
 	lang := r.URL.Query().Get("locale")
 	accept := r.Header.Get("Accept-Language")
+
+	if t.isDevelopment {
+		t.parseTranslationFiles()
+	}
 
 	localizer := i18n.NewLocalizer(t.bundle, lang, accept)
 
@@ -60,9 +71,6 @@ func (t *Translator) T(r *http.Request, id string, data map[string]interface{}, 
 
 	text, err := localizer.Localize(lc)
 	if err != nil {
-		// TODO Consider a "development" switch for this to raise an error or
-		// something rather than outputting the "translation missing:"
-		// message.
 		return "translation missing: " + guessLang(accept, lang) + ", " + id
 	}
 

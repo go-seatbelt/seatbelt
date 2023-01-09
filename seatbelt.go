@@ -381,7 +381,7 @@ func New(opts ...Option) *App {
 		log.Fatalf("seatbelt: signing key is not a valid hexadecimal string: %+v", err)
 	}
 
-	translator := i18n.New(opt.LocaleDir)
+	translator := i18n.New(opt.LocaleDir, opt.Reload)
 
 	// Initialize the underlying chi mux so that we can setup our default
 	// middleware stack.
