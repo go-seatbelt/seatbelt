@@ -552,7 +552,9 @@ func (a *App) handle(verb, path string, handle func(c *Context) error) {
 	}
 }
 
-func (a *App) Route(pattern string, fn func(app *App)) *App {
+// Namespace creates a new *seatbelt.App with an empty middleware stack and
+// mounts it on the `pattern` as a subrouter.
+func (a *App) Namespace(pattern string, fn func(app *App)) *App {
 	if fn == nil {
 		panic(fmt.Sprintf("seatbelt: attempting to Route() a nil sub-app on '%s'", pattern))
 	}

@@ -64,7 +64,7 @@ func main() {
 		return c.String(200, c.I18N.T("Greet", nil))
 	})
 
-	app.Route("/admin", func(app *seatbelt.App) {
+	app.Namespace("/admin", func(app *seatbelt.App) {
 		app.Use(func(fn func(ctx *seatbelt.Context) error) func(*seatbelt.Context) error {
 			const name = "admin"
 

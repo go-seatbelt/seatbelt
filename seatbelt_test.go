@@ -30,7 +30,7 @@ func TestSubRouter(t *testing.T) {
 	app.Get("/", func(c *Context) error {
 		return c.String(200, "home")
 	})
-	app.Route("/admin", func(app *App) {
+	app.Namespace("/admin", func(app *App) {
 		app.Get("/home", func(c *Context) error {
 			return c.String(200, "ok")
 		})
