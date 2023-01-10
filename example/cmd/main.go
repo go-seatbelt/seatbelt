@@ -64,5 +64,19 @@ func main() {
 		return c.String(200, c.I18N.T("Greet", nil))
 	})
 
+	app.Namespace("/admin", func(app *seatbelt.App) {
+		app.Use(func(fn func(ctx *seatbelt.Context) error) func(*seatbelt.Context) error {
+			const name = "admin"
+
+			return func(c *seatbelt.Context) error {
+				c.Values.Set("Name", name)
+				return fn(c)
+			}
+		})
+		app.Get("/home", func(c *seatbelt.Context) error {
+			return c.Render("admin", nil)
+		})
+	})
+
 	log.Fatalln(app.Start(":3000"))
 }

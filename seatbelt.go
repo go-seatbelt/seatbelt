@@ -552,6 +552,31 @@ func (a *App) handle(verb, path string, handle func(c *Context) error) {
 	}
 }
 
+// Namespace creates a new *seatbelt.App with an empty middleware stack and
+// mounts it on the `pattern` as a subrouter.
+func (a *App) Namespace(pattern string, fn func(app *App)) *App {
+	if fn == nil {
+		panic(fmt.Sprintf("seatbelt: attempting to Route() a nil sub-app on '%s'", pattern))
+	}
+
+	subApp := &App{
+		signingKey:   a.signingKey,
+		i18n:         a.i18n,
+		session:      a.session,
+		renderer:     a.renderer,
+		errorHandler: a.errorHandler,
+		mux:          chi.NewRouter(),
+		// TODO Not sure if this is actually the behaviour we want -- should
+		// it inherit the middleware stack?
+		middlewares: make([]MiddlewareFunc, 0),
+	}
+
+	fn(subApp)
+	a.mux.Mount(pattern, subApp)
+
+	return subApp
+}
+
 // Head routes HEAD requests to the given path.
 func (a *App) Head(path string, handle func(c *Context) error) {
 	a.handle("HEAD", path, handle)
