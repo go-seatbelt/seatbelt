@@ -23,7 +23,7 @@ import (
 )
 
 // Version is the version of the Seatbelt package.
-const Version = "v0.2.0"
+const Version = "v0.3.0"
 
 // ChiPathParamFunc extracts path parameters from the given HTTP request using
 // the github.com/go-chi/chi router.
