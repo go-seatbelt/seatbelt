@@ -1,6 +1,7 @@
 package seatbelt
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -204,6 +205,24 @@ func mergeMaps(m1, m2 map[string]interface{}) map[string]interface{} {
 func (c *context) Render(name string, data map[string]interface{}, opts ...render.RenderOptions) error {
 	c.renderer.HTML(c.w, c.r, name, mergeMaps(c.values.List(), data), opts...)
 	return nil
+}
+
+type responseStaller struct {
+	w    http.ResponseWriter
+	code int
+	buf  *bytes.Buffer
+}
+
+func (rs *responseStaller) Write(b []byte) (int, error) { return rs.buf.Write(b) }
+func (rs *responseStaller) WriteHeader(code int)        { rs.code = code }
+func (rs *responseStaller) Header() http.Header         { return rs.w.Header() }
+
+// RenderToBytes is the same as Render, but returns the rendered template as
+// a byte slice instead of writing diredtly to the response writer.
+func (c *context) RenderToBytes(name string, data map[string]interface{}, opts ...render.RenderOptions) []byte {
+	rs := &responseStaller{w: c.Response(), buf: &bytes.Buffer{}}
+	c.renderer.HTML(rs, c.r, name, mergeMaps(c.values.List(), data), opts...)
+	return rs.buf.Bytes()
 }
 
 // Request returns the underlying *http.Request belonging to the current
