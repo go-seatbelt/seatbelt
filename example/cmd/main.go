@@ -26,6 +26,11 @@ func main() {
 	app.Get("/", func(c *seatbelt.Context) error {
 		return c.Render("index", nil)
 	})
+	app.Get("/rendertostring", func(c *seatbelt.Context) error {
+		page := c.RenderToBytes("index", nil)
+		_, err := c.Response().Write([]byte(page))
+		return err
+	})
 	app.Get("/session", func(c *seatbelt.Context) error {
 		return c.Render("session", map[string]interface{}{
 			"Session": c.Session.Get("session"),
