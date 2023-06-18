@@ -408,7 +408,7 @@ func New(opts ...Option) *App {
 	// Initialize the underlying chi mux so that we can setup our default
 	// middleware stack.
 	mux := chi.NewRouter()
-	mux.Use(csrf.Protect(signingKey))
+	mux.Use(csrf.Protect(signingKey, csrf.Path("/")))
 
 	sess := session.New(signingKey, session.Options{
 		Name:   opt.SessionName,
