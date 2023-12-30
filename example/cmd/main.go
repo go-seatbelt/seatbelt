@@ -9,9 +9,10 @@ import (
 
 func main() {
 	app := seatbelt.New(seatbelt.Option{
-		TemplateDir: "templates",
-		Reload:      true,
-		LocaleDir:   "locales",
+		TemplateDir:   "templates",
+		Reload:        true,
+		LocaleDir:     "locales",
+		SkipCSRFPaths: []string{"/api"},
 	})
 
 	app.Use(func(fn func(ctx *seatbelt.Context) error) func(*seatbelt.Context) error {
@@ -25,6 +26,9 @@ func main() {
 
 	app.Get("/", func(c *seatbelt.Context) error {
 		return c.Render("index", nil)
+	})
+	app.Post("/api", func(c *seatbelt.Context) error {
+		return c.JSON(201, map[string]string{"message": "Hello, world!"})
 	})
 	app.Get("/rendertostring", func(c *seatbelt.Context) error {
 		page := c.RenderToBytes("index", nil)
