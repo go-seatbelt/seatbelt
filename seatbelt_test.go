@@ -73,3 +73,69 @@ func TestSubRouter(t *testing.T) {
 		}
 	})
 }
+
+func TestCSRFSkipPaths(t *testing.T) {
+	app := New(Option{
+		SkipCSRFPaths: []string{"/api", "/skip-me"},
+	})
+
+	app.Get("/", func(c *Context) error {
+		return c.JSON(200, map[string]string{"message": "ok"})
+	})
+	app.Post("/", func(c *Context) error {
+		return c.NoContent()
+	})
+	app.Post("/api", func(c *Context) error {
+		return c.NoContent()
+	})
+	app.Put("/skip-me/test", func(c *Context) error {
+		return c.NoContent()
+	})
+
+	srv := httptest.NewServer(app)
+	defer srv.Close()
+
+	cases := []struct {
+		path   string
+		method string
+		status int
+	}{
+		{
+			path:   "/",
+			method: http.MethodGet,
+			status: 200,
+		},
+		{
+			path:   "/",
+			method: http.MethodPost,
+			status: 403,
+		},
+		{
+			path:   "/api",
+			method: http.MethodPost,
+			status: 204,
+		},
+		{
+			path:   "/skip-me/test",
+			method: http.MethodPut,
+			status: 204,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.method+" "+c.path, func(t *testing.T) {
+			req, err := http.NewRequest(c.method, srv.URL+c.path, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if resp.StatusCode != c.status {
+				t.Fatalf("expected %d but got %d", c.status, resp.StatusCode)
+			}
+		})
+	}
+}

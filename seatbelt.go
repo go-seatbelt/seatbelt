@@ -305,6 +305,10 @@ type Option struct {
 	// SkipServeFiles does not automatically serve static files from the
 	// project's /public directory when set to true. Default is false.
 	SkipServeFiles bool
+
+	// SkipCSRFPaths is used to skip the CSRF validation to POST, PUT, PATCH,
+	// DELETE, etc requests to paths that match one of the given paths.
+	SkipCSRFPaths []string
 }
 
 // setDefaults sets the default values for Seatbelt options.
@@ -408,6 +412,17 @@ func New(opts ...Option) *App {
 	// Initialize the underlying chi mux so that we can setup our default
 	// middleware stack.
 	mux := chi.NewRouter()
+	mux.Use(func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			for _, skipPath := range opt.SkipCSRFPaths {
+				if strings.HasPrefix(r.URL.Path, skipPath) {
+					r = csrf.UnsafeSkipCheck(r)
+
+				}
+			}
+			h.ServeHTTP(w, r)
+		})
+	})
 	mux.Use(csrf.Protect(signingKey, csrf.Path("/")))
 
 	sess := session.New(signingKey, session.Options{
