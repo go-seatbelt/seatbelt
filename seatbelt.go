@@ -330,14 +330,17 @@ func (o *Option) setDefaults() {
 // The "master.key" file is a secret and should be treated as such. It should
 // not be checked into your source code, and in production, the "SECRET"
 // environment variable should instead be used.
+//
+// The "SECRET" environment variable takes precendence over the "master.key"
+// file.
 func (o *Option) setMasterKey() {
-	if key := os.Getenv("SECRET"); key != "" {
-		o.SigningKey = key
-	}
-
 	if key, err := os.ReadFile("master.key"); err == nil {
 		o.SigningKey = string(key)
 		return
+	}
+
+	if key := os.Getenv("SECRET"); key != "" {
+		o.SigningKey = key
 	}
 
 	b := make([]byte, 32)
