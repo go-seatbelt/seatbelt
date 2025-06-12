@@ -309,6 +309,12 @@ type Option struct {
 	// SkipCSRFPaths is used to skip the CSRF validation to POST, PUT, PATCH,
 	// DELETE, etc requests to paths that match one of the given paths.
 	SkipCSRFPaths []string
+
+	// AllowCSRFLocalhost forces the CSRF middleware to work for requests from
+	// non-HTTPS origins.
+	//
+	// See https://github.com/gorilla/csrf/issues/190.
+	AllowCSRFLocalhost bool
 }
 
 // setDefaults sets the default values for Seatbelt options.
@@ -417,6 +423,10 @@ func New(opts ...Option) *App {
 	mux := chi.NewRouter()
 	mux.Use(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if opt.EnableCSRFLocalhost {
+				r = csrf.PlaintextHTTPRequest(r)
+			}
+
 			for _, skipPath := range opt.SkipCSRFPaths {
 				if strings.HasPrefix(r.URL.Path, skipPath) {
 					r = csrf.UnsafeSkipCheck(r)
