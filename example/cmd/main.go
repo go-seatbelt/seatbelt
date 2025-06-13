@@ -9,10 +9,11 @@ import (
 
 func main() {
 	app := seatbelt.New(seatbelt.Option{
-		TemplateDir:   "templates",
-		Reload:        true,
-		LocaleDir:     "locales",
-		SkipCSRFPaths: []string{"/api"},
+		TemplateDir:        "templates",
+		Reload:             true,
+		LocaleDir:          "locales",
+		SkipCSRFPaths:      []string{"/api"},
+		AllowCSRFLocalhost: true,
 	})
 
 	app.Use(func(fn func(ctx *seatbelt.Context) error) func(*seatbelt.Context) error {
