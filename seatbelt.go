@@ -423,7 +423,7 @@ func New(opts ...Option) *App {
 	mux := chi.NewRouter()
 	mux.Use(func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if opt.EnableCSRFLocalhost {
+			if opt.AllowCSRFLocalhost {
 				r = csrf.PlaintextHTTPRequest(r)
 			}
 
